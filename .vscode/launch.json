@@ -6,7 +6,7 @@
     "configurations": [
     
         {
-            "name": "Python Debugger: Module",
+            "name": "debug main",
             "type": "debugpy",
             "request": "launch",
             "module": "main"
