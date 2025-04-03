@@ -369,20 +369,20 @@ class MazeGame(pyglet.window.Window):
                 # Draw an box symbol for the door
 
                 # top
-                glVertex3f(x - size / 2, y + size / 2, z)  
-                glVertex3f(x + size / 2, y + size / 2, z) 
+                glVertex3f(x - size / 2, y + size / 2, z)
+                glVertex3f(x + size / 2, y + size / 2, z)
 
                 # right
-                glVertex3f(x + size / 2, y - size / 2, z)   
-                glVertex3f(x + size / 2, y + size / 2, z)   
+                glVertex3f(x + size / 2, y - size / 2, z)
+                glVertex3f(x + size / 2, y + size / 2, z)
 
                 # bottom
-                glVertex3f(x - size / 2, y - size / 2, z)  
-                glVertex3f(x + size / 2, y - size / 2, z)   
+                glVertex3f(x - size / 2, y - size / 2, z)
+                glVertex3f(x + size / 2, y - size / 2, z)
 
                 # left
-                glVertex3f(x - size / 2, y - size / 2, z)  
-                glVertex3f(x - size / 2, y + size / 2, z) 
+                glVertex3f(x - size / 2, y - size / 2, z)
+                glVertex3f(x - size / 2, y + size / 2, z)
 
             case 'D':
                 if signal:
@@ -414,6 +414,11 @@ class MazeGame(pyglet.window.Window):
         Capture a screenshot of the current frame.
         """
         self.dispatch_event('on_draw')
+        return pyglet.image.get_buffer_manager()\
+            .get_color_buffer()\
+            .get_image_data()\
+            .get_data('RGB', self.width * 3)
+
         pyglet.image.get_buffer_manager().get_color_buffer().save('screenshot.png')
         return pyglet.image.load('screenshot.png').get_image_data().get_data('RGB', self.width * 3)
 
@@ -529,3 +534,24 @@ class MazeEnv(gym.Env):
         if self.window:
             self.window.close()
             self.window = None
+
+
+class GameWapper:
+    width: int
+    height: int
+
+    showWindow: bool
+
+    game: MazeGame
+
+    def __init__(self, width: int, height: int, showWindow: bool = True):
+        self.width = width
+        self.height = height
+        self.showWindow = showWindow
+
+    def step(self, actions: list[bool]) -> tuple[list[bytes], int, bool]:
+        image = [b'\x00' for _ in range(self.height * self.width * 3)]
+        reward = 0
+        completed = False
+
+        return image, reward, completed
