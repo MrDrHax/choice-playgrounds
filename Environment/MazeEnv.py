@@ -409,18 +409,20 @@ class MazeGame(pyglet.window.Window):
 
         glEnd()
 
-    def get_screenshot(self):
+    def get_screenshot(self, save=False):
         """
         Capture a screenshot of the current frame.
         """
         self.dispatch_event('on_draw')
+
+        if save:
+            pyglet.image.get_buffer_manager().get_color_buffer().save('screenshot.png')
+            return pyglet.image.load('screenshot.png').get_image_data().get_data('RGB', self.width * 3)
+
         return pyglet.image.get_buffer_manager()\
             .get_color_buffer()\
             .get_image_data()\
             .get_data('RGB', self.width * 3)
-
-        pyglet.image.get_buffer_manager().get_color_buffer().save('screenshot.png')
-        return pyglet.image.load('screenshot.png').get_image_data().get_data('RGB', self.width * 3)
 
 
 class MazeEnv(gym.Env):
@@ -555,3 +557,9 @@ class GameWapper:
         completed = False
 
         return image, reward, completed
+
+    def reset():
+        pass
+
+    def close():
+        pass
