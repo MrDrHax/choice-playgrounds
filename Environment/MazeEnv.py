@@ -111,6 +111,9 @@ class MazeGame(pyglet.window.Window):
             'B': doorOptions[selected[not rotated]],
         }
 
+        prob = self.doors[random.choice(['A', 'B'])]['probability']
+        isInverse = random.random() <= prob
+
         # Initialize door positions
         for row in range(len(self.maze)):
             for col in range(len(self.maze[row])):
@@ -118,9 +121,9 @@ class MazeGame(pyglet.window.Window):
                     self.doors[self.maze[row][col]]['position'] = (col, row)
 
                     # pre cook probability to show possible good/bad outcome
-                    prob = self.doors[self.maze[row][col]]['probability']
+                    
                     self.doors[self.maze[row][col]
-                               ]['signal'] = random.random() <= prob
+                               ]['signal'] = isInverse
 
     def on_resize(self, width, height):
         # Use framebuffer size in case of high-DPI displays.
@@ -349,9 +352,9 @@ class MazeGame(pyglet.window.Window):
 
             case 'B':
                 if signal:
-                    glColor3f(1.0, 0.0, 0.0)  # Red for normal outcome
+                    glColor3f(0.0, 1.0, 0.0)  # Green for normal outcome
                 else:
-                    glColor3f(0.0, 1.0, 0.0)  # Green for good outcome
+                    glColor3f(1.0, 0.0, 0.0)  # Red for bad outcome
 
                 # Draw a cross symbol for the door
                 glVertex3f(x, y - size / 2, z)  # Bottom of the vertical line
@@ -386,9 +389,9 @@ class MazeGame(pyglet.window.Window):
 
             case 'D':
                 if signal:
-                    glColor3f(1.0, 0.0, 0.0)  # Red for normal outcome
+                    glColor3f(0.0, 1.0, 0.0)  # Green for normal outcome
                 else:
-                    glColor3f(0.0, 1.0, 0.0)  # Green for good outcome
+                    glColor3f(1.0, 0.0, 0.0)  # Red for bad outcome
 
                 # Draw a diamond symbol for the door
                 # top
@@ -409,15 +412,14 @@ class MazeGame(pyglet.window.Window):
 
         glEnd()
 
-    def get_screenshot(self, save=False):
+    def get_screenshot(self, save=False, name='screenshot.png'):
         """
         Capture a screenshot of the current frame.
         """
         self.dispatch_event('on_draw')
 
         if save:
-            pyglet.image.get_buffer_manager().get_color_buffer().save('screenshot.png')
-            return pyglet.image.load('screenshot.png').get_image_data().get_data('RGB', self.width * 3)
+            pyglet.image.get_buffer_manager().get_color_buffer().save(name)
 
         return pyglet.image.get_buffer_manager()\
             .get_color_buffer()\
@@ -551,38 +553,71 @@ class GameWrapper:
 
         self.game = MazeGame(width=width, height=height)
 
+        self.reward = 0
+
         self.game.set_visible(showWindow)
 
     def step(self, actions: list[bool]) -> tuple[bytes, int, bool]:
-        if len(actions) != 6:
-            raise IndexError(
-                f'actions does not have the correct amount of actions. Expected 6, got {len(actions)}'
-            )
-        reward = 0
-        completed = False
+        '''
+        step Step through an iteration. In game terms "Tick"
 
-        action_keys = {
-            key.W: actions[0],
-            key.S: actions[1],
-            key.A: actions[2],
-            key.D: actions[3],
-            key.LEFT: actions[4],
-            key.RIGHT: actions[5],
-        }
+        Args:
+            actions (list[bool]): A list of the 6 actions the player must take. Only works if showWindow is false
 
-        self.game.keys.update(action_keys)
+        Raises:
+            IndexError: If list does not contain the proper amount of items
+
+        Returns:
+            tuple[bytes, int, bool]: The (image, reward, completed?) states that are used to train the AI.
+        '''
+        if not self.showWindow:
+            if len(actions) != 6:
+                raise IndexError(
+                    f'actions does not have the correct amount of actions. Expected 6, got {len(actions)}'
+                )
+
+            action_keys = {
+                key.W: actions[0],
+                key.S: actions[1],
+                key.A: actions[2],
+                key.D: actions[3],
+                key.LEFT: actions[4],
+                key.RIGHT: actions[5],
+            }
+
+            self.game.keys.update(action_keys)
 
         self._run_scheduler()
 
         image = self.game.get_screenshot()
 
-        return image, reward, completed
+        # mientras mas tiempo se pase sin moverse
+        self.reward -= 0.01 if not (actions[0]
+                                    or actions[1]
+                                    or actions[2]
+                                    or actions[3]) else 0
+        done = False
 
-    def reset():
-        pass
+        if self.game.maze != MAZE and self.game.z > 4:
+            done = True
+            if self.game.maze == GOOD_ROOM:
+                # Reward for good room
+                self.reward = self.game.selectedDoor['reward']
+            elif self.game.maze == BAD_ROOM:
+                # Penalty for bad room
+                self.reward = -self.game.selectedDoor['reward']
 
-    def close():
-        pass
+        print(self.reward)
+
+        return image, self.reward, done
+
+    def reset(self):
+        self.game.reset()
+        self.reward = 0
+
+    def close(self):
+        self.game.close()
+        self.game = None
 
     def _run_scheduler(self):
         pyglet.clock.tick()

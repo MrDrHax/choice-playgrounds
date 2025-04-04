@@ -1,7 +1,6 @@
 from Environment.MazeEnv import MazeGame, GameWrapper
-import pyglet
 
-game = GameWrapper(600, 600, False)
+game = GameWrapper(600, 600, True)
 
 while True:
     game.step([
