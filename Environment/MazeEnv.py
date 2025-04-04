@@ -538,23 +538,43 @@ class MazeEnv(gym.Env):
             self.window = None
 
 
-class GameWapper:
+class GameWrapper:
     width: int
     height: int
 
     showWindow: bool
-
-    game: MazeGame
 
     def __init__(self, width: int, height: int, showWindow: bool = True):
         self.width = width
         self.height = height
         self.showWindow = showWindow
 
-    def step(self, actions: list[bool]) -> tuple[list[bytes], int, bool]:
-        image = [b'\x00' for _ in range(self.height * self.width * 3)]
+        self.game = MazeGame(width=width, height=height)
+
+        self.game.set_visible(showWindow)
+
+    def step(self, actions: list[bool]) -> tuple[bytes, int, bool]:
+        if len(actions) != 6:
+            raise IndexError(
+                f'actions does not have the correct amount of actions. Expected 6, got {len(actions)}'
+            )
         reward = 0
         completed = False
+
+        action_keys = {
+            key.W: actions[0],
+            key.S: actions[1],
+            key.A: actions[2],
+            key.D: actions[3],
+            key.LEFT: actions[4],
+            key.RIGHT: actions[5],
+        }
+
+        self.game.keys.update(action_keys)
+
+        self._run_scheduler()
+
+        image = self.game.get_screenshot()
 
         return image, reward, completed
 
@@ -563,3 +583,13 @@ class GameWapper:
 
     def close():
         pass
+
+    def _run_scheduler(self):
+        pyglet.clock.tick()
+
+        self.game.switch_to()
+        self.game.dispatch_events()
+
+        self.game.on_draw()
+
+        self.game.flip()
