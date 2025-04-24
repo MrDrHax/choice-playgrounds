@@ -5,6 +5,7 @@ import pyglet
 from pyglet.gl import *
 from pyglet.window import key
 import math
+import torch
 
 import random
 
@@ -421,11 +422,31 @@ class MazeGame(pyglet.window.Window):
         if save:
             pyglet.image.get_buffer_manager().get_color_buffer().save(name)
 
+        # Get the buffer and convert to numpy array
+        buffer = pyglet.image.get_buffer_manager().get_color_buffer()
+        image_data = buffer.get_image_data()
+        width, height = buffer.width, buffer.height
+        pitch = -(image_data.width * len(image_data.format))  # Flip vertically
+
+        # Raw image bytes to numpy array
+        img_data = np.frombuffer(image_data.get_data(image_data.format, -pitch), dtype=np.uint8)
+        img_data = img_data.reshape((height, width, len(image_data.format)))  # (H, W, C)
+
+        # Convert to PyTorch tensor and flip vertically
+        tensor = torch.from_numpy(img_data).permute(2, 0, 1).flip(1)  # Shape: (C, H, W), flip Y-axis
+
+        # Optional: normalize to [0, 1]
+        tensor = tensor.float() / 255.0
+
+        return tensor
+
+        """
         return pyglet.image.get_buffer_manager()\
             .get_color_buffer()\
             .get_image_data()\
             .get_data('RGB', self.width * 3)
 
+        """
 
 class MazeEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
@@ -589,6 +610,7 @@ class GameWrapper:
 
         self._run_scheduler()
 
+        # Get the image of the game
         image = self.game.get_screenshot()
 
         # mientras mas tiempo se pase sin moverse
@@ -606,8 +628,6 @@ class GameWrapper:
             elif self.game.maze == BAD_ROOM:
                 # Penalty for bad room
                 self.reward = -self.game.selectedDoor['reward']
-
-        print(self.reward)
 
         return image, self.reward, done
 

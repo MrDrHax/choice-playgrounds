@@ -1,18 +1,21 @@
 from Environment.MazeEnv import MazeGame, GameWrapper
+import random
+import torch
 
-game = GameWrapper(600, 600, True)
+# Initialize the game wrapper
+game = GameWrapper(600, 600, False)
 
+step = 0
+# Run the game
 while True:
-    game.step([
-        False,
-        False,
-        False,
-        False,
-        False,
-        True,
-    ])
+    #Get a set of random actions
+    actions = [random.random() > 0.5 for _ in range(6)]
 
-# game = MazeGame(width=800, height=600)
+    #print(step, actions)
+    step += 1
 
-# if __name__ == "__main__":
-#     pyglet.app.run()
+    # Step through the game
+    obs, reward, done = game.step(actions)
+
+    if done:
+        game.reset()
