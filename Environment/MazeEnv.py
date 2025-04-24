@@ -68,8 +68,11 @@ class MazeGame(pyglet.window.Window):
             width=width,
             height=height,
             caption="Maze Navigation Game Debug",
-            resizable=True
+            resizable=False
         )
+
+        self.fixed_width = width
+        self.fixed_height = height
 
         # Enable depth testing so that closer objects obscure further ones.
         glEnable(GL_DEPTH_TEST)
@@ -126,7 +129,12 @@ class MazeGame(pyglet.window.Window):
                     self.doors[self.maze[row][col]
                                ]['signal'] = isInverse
 
+
     def on_resize(self, width, height):
+        # Enforce fixed size
+        if width != self.fixed_width or height != self.fixed_height:
+            self.set_size(self.fixed_width, self.fixed_height)
+
         # Use framebuffer size in case of high-DPI displays.
         fb_width, fb_height = self.get_framebuffer_size()
         glViewport(0, 0, fb_width, fb_height)
@@ -432,11 +440,18 @@ class MazeGame(pyglet.window.Window):
         img_data = np.frombuffer(image_data.get_data(image_data.format, -pitch), dtype=np.uint8)
         img_data = img_data.reshape((height, width, len(image_data.format)))  # (H, W, C)
 
+        # Drop the alpha channel if it exists
+        if img_data.shape[2] == 4:
+            img_data = img_data[:, :, :3]
+
         # Convert to PyTorch tensor and flip vertically
         tensor = torch.from_numpy(img_data).permute(2, 0, 1).flip(1)  # Shape: (C, H, W), flip Y-axis
 
-        # Optional: normalize to [0, 1]
+        # Normalize to [0, 1]
         tensor = tensor.float() / 255.0
+
+        # Reshape to (1, C, H, W)
+        tensor = tensor.unsqueeze(0)
 
         return tensor
 
@@ -560,7 +575,6 @@ class MazeEnv(gym.Env):
             self.window.close()
             self.window = None
 
-
 class GameWrapper:
     width: int
     height: int
@@ -632,8 +646,13 @@ class GameWrapper:
         return image, self.reward, done
 
     def reset(self):
+        """
+        Reset the game to its initial state
+        """
         self.game.reset()
         self.reward = 0
+
+        return self.game.get_screenshot(), 0, False
 
     def close(self):
         self.game.close()
