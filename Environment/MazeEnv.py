@@ -451,7 +451,7 @@ class MazeGame(pyglet.window.Window):
         tensor = tensor.float() / 255.0
 
         # Reshape to (1, C, H, W)
-        tensor = tensor.unsqueeze(0)
+        #tensor = tensor.unsqueeze(0)
 
         return tensor
 
@@ -590,7 +590,8 @@ class GameWrapper:
 
         self.reward = 0
 
-        self.game.set_visible(showWindow)
+        #self.game.set_visible(showWindow)
+
 
     def step(self, actions: list[bool]) -> tuple[bytes, int, bool]:
         '''
