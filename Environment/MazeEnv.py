@@ -9,6 +9,8 @@ import torch
 
 import random
 
+import threading
+
 fps = 1/60.0
 
 doorOptions = {
@@ -62,6 +64,55 @@ BAD_ROOM = [
 ]
 
 
+def threadWorker(wrappers: list['GameWrapper'], actions: list[list[bool]], results: list, index: int):
+    results[index] = [w.step(a) for w, a in zip(wrappers, actions)]
+
+
+class multiGames:
+
+    def __init__(self, width: int, height: int, batches: int = 10, size: int = 50):
+        self.batches = batches
+        self.size = size
+
+        self.games = []
+
+        for i in range(batches):
+            self.games.append([GameWrapper(width, height, False)
+                              for _ in range(size)])
+
+    def step(self, inputs: list[list[bool]]) -> tuple[bytes, int, bool]:
+        threads = []
+
+        results = [None for _ in range(self.batches)]
+
+        for i in range(self.batches):
+            threadWorker(
+                self.games[i],
+                inputs[i * self.size: i * self.size + self.size],
+                results,
+                i,
+            )
+
+        # for i in range(self.batches):
+        #     t = threading.Thread(
+        #         target=threadWorker,
+        #         args=(
+        #             self.games[i],
+        #             inputs[i * self.size: i * self.size + self.size],
+        #             results,
+        #             i,
+        #         ),
+        #     )
+        #     threads.append(t)
+        #     t.start()
+
+        # for t in threads:
+        #     t.join()
+
+        # flatten
+        return [item for sublist in results for item in sublist]
+
+
 class MazeGame(pyglet.window.Window):
     def __init__(self, width, height, visible=True):
         super(MazeGame, self).__init__(
@@ -91,8 +142,6 @@ class MazeGame(pyglet.window.Window):
 
         self.keys = key.KeyStateHandler()
         self.push_handlers(self.keys)
-
-        pyglet.clock.schedule_interval(self.update, 1/60.0)
 
     def reset(self):
         '''Reset the maze'''
@@ -126,10 +175,9 @@ class MazeGame(pyglet.window.Window):
                     self.doors[self.maze[row][col]]['position'] = (col, row)
 
                     # pre cook probability to show possible good/bad outcome
-                    
+
                     self.doors[self.maze[row][col]
                                ]['signal'] = isInverse
-
 
     def on_resize(self, width, height):
         # Enforce fixed size
@@ -438,23 +486,27 @@ class MazeGame(pyglet.window.Window):
         pitch = -(image_data.width * len(image_data.format))  # Flip vertically
 
         # Raw image bytes to numpy array
-        img_data = np.frombuffer(image_data.get_data(image_data.format, -pitch), dtype=np.uint8)
-        img_data = img_data.reshape((height, width, len(image_data.format)))  # (H, W, C)
+        img_data = np.frombuffer(image_data.get_data(
+            image_data.format, -pitch), dtype=np.uint8)
+        img_data = img_data.reshape(
+            (height, width, len(image_data.format)))  # (H, W, C)
 
         # Drop the alpha channel if it exists
         if img_data.shape[2] == 4:
             img_data = img_data[:, :, :3]
 
         # Convert to PyTorch tensor and flip vertically
-        tensor = torch.from_numpy(img_data).permute(2, 0, 1).flip(1)  # Shape: (C, H, W), flip Y-axis
+        tensor = torch.from_numpy(img_data).permute(
+            2, 0, 1).flip(1)  # Shape: (C, H, W), flip Y-axis
 
         # Normalize to [0, 1]
         tensor = tensor.float() / 255.0
 
         # Reshape to (1, C, H, W)
-        #tensor = tensor.unsqueeze(0)
+        # tensor = tensor.unsqueeze(0)
 
         return tensor
+
 
 class GameWrapper:
     width: int
@@ -471,7 +523,6 @@ class GameWrapper:
 
         self.reward = 0
 
-
     def step(self, actions: list[bool]) -> tuple[bytes, int, bool]:
         '''
         step Step through an iteration. In game terms "Tick"
@@ -485,7 +536,7 @@ class GameWrapper:
         Returns:
             tuple[bytes, int, bool]: The (image, reward, completed?) states that are used to train the AI.
         '''
-        #if not self.showWindow:
+        # if not self.showWindow:
         if len(actions) != 6:
             raise IndexError(
                 f'actions does not have the correct amount of actions. Expected 6, got {len(actions)}'

@@ -1,7 +1,36 @@
-from Environment.MazeEnv import GameWrapper
+from Environment.MazeEnv import GameWrapper, multiGames
+
+# como correr multithreaded:
+
+games = multiGames(10, 10, 5, 3)
+
+a = games.step(
+    [
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+        [False, False, False, False, False, False,],
+    ]
+)
+
 from Environment.Models import CNNPPOPolicy, train_ppo, test_policy, sample_actions
 
 import torch
+
+
 
 # Initialize the game wrapper
 width = 64
@@ -48,7 +77,8 @@ model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # Train the model
-train_ppo(game, model, optimizer, epochs=100, steps_per_epoch=256, clip_eps=0.2)
+train_ppo(game, model, optimizer, epochs=100,
+          steps_per_epoch=256, clip_eps=0.2)
 
 game = GameWrapper(width, height, True)
 
