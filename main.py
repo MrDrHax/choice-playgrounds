@@ -4,8 +4,8 @@ from Environment.Models import CNNPPOPolicy, train_ppo, test_policy, sample_acti
 import torch
 
 # Initialize the game wrapper
-width = 256
-height = 256
+width = 64
+height = 64
 game = GameWrapper(width, height, False)
 
 # Initialize the model
@@ -36,7 +36,6 @@ while episode < 100:
         step = 0
 
 game.close()
-
 """
 
 # Device to run the model on
@@ -49,7 +48,9 @@ model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # Train the model
-train_ppo(game, model, optimizer, epochs=10, steps_per_epoch=256, clip_eps=0.2)
+train_ppo(game, model, optimizer, epochs=100, steps_per_epoch=256, clip_eps=0.2)
+
+game = GameWrapper(width, height, True)
 
 # Test the model
 test_policy(game, model, episodes=5)

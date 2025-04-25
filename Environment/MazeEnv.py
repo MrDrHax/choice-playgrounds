@@ -63,12 +63,13 @@ BAD_ROOM = [
 
 
 class MazeGame(pyglet.window.Window):
-    def __init__(self, width, height):
+    def __init__(self, width, height, visible=True):
         super(MazeGame, self).__init__(
             width=width,
             height=height,
             caption="Maze Navigation Game Debug",
-            resizable=False
+            resizable=False,
+            visible=visible
         )
 
         self.fixed_width = width
@@ -455,126 +456,6 @@ class MazeGame(pyglet.window.Window):
 
         return tensor
 
-        """
-        return pyglet.image.get_buffer_manager()\
-            .get_color_buffer()\
-            .get_image_data()\
-            .get_data('RGB', self.width * 3)
-
-        """
-
-class MazeEnv(gym.Env):
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
-
-    """
-    Custom RL environment for the Pyglet-based maze game.
-    """
-
-    def __init__(self, render_mode="human"):
-        super(MazeEnv, self).__init__()
-
-        self.width = 256
-        self.height = 256
-        self.render_mode = render_mode
-
-        # Define the action space: [0: Forward, 1: Backward, 2: Left, 3: Right, 4: Turn left, 5: Turn right]
-        self.action_space = spaces.Discrete(6)
-
-        # Define the observation space: RGB image of the environment
-        self.observation_space = spaces.Box(low=0, high=255, shape=(
-            self.height, self.width, 3), dtype=np.uint8)
-
-        # Initialize the Pyglet game only if in "human" mode
-        self.game = MazeGame(
-            width=self.width, height=self.height) if render_mode == "human" else None
-        self.window = self.game if render_mode == "human" else None
-
-        # Store the initial state
-        self.state = self.render(mode=self.render_mode)
-
-    def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
-
-        # Reset the game state
-        self.game.x = 3.5
-        self.game.z = 1.5
-        self.game.angle = 180.0
-        self.game.maze = MAZE
-
-        # Return the initial observation
-        self.state = self.render(mode=self.render_mode)
-        return self.state, {}
-
-    def step(self, action):
-        """
-        Take a step in the environment based on the action.
-        """
-        # Temporarily store the action keys
-        action_keys = {key.W: False, key.S: False, key.A: False,
-                       key.D: False, key.LEFT: False, key.RIGHT: False}
-
-        if action == 0:
-            action_keys[key.W] = True
-        elif action == 1:
-            action_keys[key.S] = True
-        elif action == 2:
-            action_keys[key.A] = True
-        elif action == 3:
-            action_keys[key.D] = True
-        elif action == 5:
-            action_keys[key.LEFT] = True
-        elif action == 4:
-            action_keys[key.RIGHT] = True
-
-        # Apply the actions to the game
-        self.game.keys.update(action_keys)
-        self.game.update(fps)  # Assume 60 FPS physics update
-
-        # Reset keys after update to prevent sticky input
-        self.game.keys = {key.W: False, key.S: False, key.A: False, key.D: False,
-                          key.LEFT: False, key.RIGHT: False, key.ESCAPE: False, key.R: False}
-
-        # Get the new state
-        self.state = self.render(mode=self.render_mode)
-
-        # Reward system
-        # Small penalty for each step (0.5 point per second)
-        reward = -fps * 0.5
-        done = False
-
-        if self.game.maze != MAZE and self.game.z > 6:
-            done = True
-            if self.game.maze == GOOD_ROOM:
-                # Reward for good room
-                reward = self.game.selectedDoor['reward']
-            elif self.game.maze == BAD_ROOM:
-                # Penalty for bad room
-                reward = -self.game.selectedDoor['reward']
-
-        return self.state, reward, done, False, {}
-
-    def render(self, mode="human"):
-        if mode == "human":
-            if self.window is None:
-                # Ensure window is created if switched to human mode
-                self.window = MazeGame(width=self.width, height=self.height)
-            self.window.switch_to()
-            self.window.dispatch_events()
-            self.window.dispatch_event("on_draw")
-            self.window.flip()
-        buffer = pyglet.image.get_buffer_manager().get_color_buffer()
-        data = buffer.get_image_data().get_data("RGB", self.width * 3)
-
-        return np.frombuffer(data, dtype=np.uint8).reshape((self.height, self.width, 3))
-
-    def close(self):
-        """
-        Close the environment and Pyglet window.
-        """
-        if self.window:
-            self.window.close()
-            self.window = None
-
 class GameWrapper:
     width: int
     height: int
@@ -586,11 +467,9 @@ class GameWrapper:
         self.height = height
         self.showWindow = showWindow
 
-        self.game = MazeGame(width=width, height=height)
+        self.game = MazeGame(width=width, height=height, visible=showWindow)
 
         self.reward = 0
-
-        #self.game.set_visible(showWindow)
 
 
     def step(self, actions: list[bool]) -> tuple[bytes, int, bool]:
@@ -606,22 +485,22 @@ class GameWrapper:
         Returns:
             tuple[bytes, int, bool]: The (image, reward, completed?) states that are used to train the AI.
         '''
-        if not self.showWindow:
-            if len(actions) != 6:
-                raise IndexError(
-                    f'actions does not have the correct amount of actions. Expected 6, got {len(actions)}'
-                )
+        #if not self.showWindow:
+        if len(actions) != 6:
+            raise IndexError(
+                f'actions does not have the correct amount of actions. Expected 6, got {len(actions)}'
+            )
 
-            action_keys = {
-                key.W: actions[0],
-                key.S: actions[1],
-                key.A: actions[2],
-                key.D: actions[3],
-                key.LEFT: actions[4],
-                key.RIGHT: actions[5],
-            }
+        action_keys = {
+            key.W: actions[0],
+            key.S: actions[1],
+            key.A: actions[2],
+            key.D: actions[3],
+            key.LEFT: actions[4],
+            key.RIGHT: actions[5],
+        }
 
-            self.game.keys.update(action_keys)
+        self.game.keys.update(action_keys)
 
         self._run_scheduler()
 
@@ -635,14 +514,17 @@ class GameWrapper:
                                     or actions[3]) else 0
         done = False
 
-        if self.game.maze != MAZE and self.game.z > 4:
-            done = True
-            if self.game.maze == GOOD_ROOM:
-                # Reward for good room
-                self.reward = self.game.selectedDoor['reward']
-            elif self.game.maze == BAD_ROOM:
-                # Penalty for bad room
-                self.reward = -self.game.selectedDoor['reward']
+        if self.game.maze != MAZE:
+            # Reward for reaching next room
+            self.reward += 0.001
+            if self.game.z > 4:
+                done = True
+                if self.game.maze == GOOD_ROOM:
+                    # Reward for good room
+                    self.reward += self.game.selectedDoor['reward']
+                elif self.game.maze == BAD_ROOM:
+                    # Penalty for bad room
+                    self.reward -= -self.game.selectedDoor['reward']
 
         return image, self.reward, done
 

@@ -63,7 +63,7 @@ def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
         advantages.insert(0, gae)
     return advantages
 
-def train_ppo(env, policy, optimizer, epochs=10, steps_per_epoch=2048, clip_eps=0.2):
+def train_ppo(env, policy, optimizer, epochs=10, steps_per_epoch=512, clip_eps=0.2):
     for epoch in range(epochs):
         obs_list, actions_list, log_probs_list, rewards, values, dones = [], [], [], [], [], []
 
@@ -71,6 +71,7 @@ def train_ppo(env, policy, optimizer, epochs=10, steps_per_epoch=2048, clip_eps=
 
         for _ in range(steps_per_epoch):
             obs_tensor = obs.unsqueeze(0)
+
             with torch.no_grad():
                 probs, value = policy(obs_tensor)
             action, log_prob, _ = sample_actions(probs)
@@ -115,11 +116,12 @@ def train_ppo(env, policy, optimizer, epochs=10, steps_per_epoch=2048, clip_eps=
 
         print(f"[EPOCH {epoch}] Total reward: {sum(rewards):.2f}")
 
-def test_policy(env, policy, episodes=5):
+def test_policy(env, policy, episodes=5, steps_per_episode=512):
     policy.eval()
     for ep in range(episodes):
         obs, _, _ = env.reset()
         total_reward = 0
+        step = 0
         while True:
             obs_tensor = obs.unsqueeze(0)
             with torch.no_grad():
@@ -127,6 +129,7 @@ def test_policy(env, policy, episodes=5):
             actions = (probs > 0.5).int()[0].tolist()
             obs, reward, done = env.step(actions)
             total_reward += reward
-            if done:
+            if done or step >= steps_per_episode:
                 break
+            step += 1
         print(f"[TEST] Episode {ep} - Total Reward: {total_reward:.2f}")
