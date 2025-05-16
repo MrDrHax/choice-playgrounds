@@ -140,8 +140,10 @@ class MazeGame(pyglet.window.Window):
 
         self.reset()
 
-        self.keys = key.KeyStateHandler()
-        self.push_handlers(self.keys)
+        # self.keys = key.KeyStateHandler()
+        # self.push_handlers(self.keys)
+
+        self.set_keys = [False, False, False, False, False, False, ]
 
     def reset(self):
         '''Reset the maze'''
@@ -196,16 +198,16 @@ class MazeGame(pyglet.window.Window):
     def update(self, dt):
         dx, dz = 0.0, 0.0
 
-        if self.keys[key.W]:
+        if self.set_keys[0]:
             dx += math.sin(math.radians(self.angle))
             dz += -math.cos(math.radians(self.angle))
-        if self.keys[key.S]:
+        if self.set_keys[1]:
             dx -= math.sin(math.radians(self.angle))
             dz -= -math.cos(math.radians(self.angle))
-        if self.keys[key.A]:
+        if self.set_keys[2]:
             dx += math.sin(math.radians(self.angle - 90))
             dz += -math.cos(math.radians(self.angle - 90))
-        if self.keys[key.D]:
+        if self.set_keys[3]:
             dx += math.sin(math.radians(self.angle + 90))
             dz += -math.cos(math.radians(self.angle + 90))
 
@@ -220,16 +222,13 @@ class MazeGame(pyglet.window.Window):
                 self.x = new_x
                 self.z = new_z
 
-        if self.keys[key.LEFT]:
+        if self.set_keys[4]:
             self.angle += self.rotation_speed * dt
-        if self.keys[key.RIGHT]:
+        if self.set_keys[5]:
             self.angle -= self.rotation_speed * dt
 
-        if self.keys[key.ESCAPE]:
-            pyglet.app.exit()
-
-        if self.keys[key.R]:
-            self.reset()
+        # if self.keys[key.R]:
+        #     self.reset()
 
         # Check if the player is in a door
         if self.maze == MAZE:
@@ -542,16 +541,18 @@ class GameWrapper:
                 f'actions does not have the correct amount of actions. Expected 6, got {len(actions)}'
             )
 
-        action_keys = {
-            key.W: actions[0],
-            key.S: actions[1],
-            key.A: actions[2],
-            key.D: actions[3],
-            key.LEFT: actions[4],
-            key.RIGHT: actions[5],
-        }
+        # action_keys = {
+        #     key.W: actions[0],
+        #     key.S: actions[1],
+        #     key.A: actions[2],
+        #     key.D: actions[3],
+        #     key.LEFT: actions[4],
+        #     key.RIGHT: actions[5],
+        # }
 
-        self.game.keys.update(action_keys)
+        # self.game.keys.update(action_keys)
+
+        self.game.set_keys = actions
 
         self._run_scheduler()
 
@@ -597,6 +598,8 @@ class GameWrapper:
 
         self.game.switch_to()
         self.game.dispatch_events()
+
+        self.game.update(0.1)
 
         self.game.on_draw()
 

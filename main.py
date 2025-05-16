@@ -35,7 +35,7 @@ import torch
 # Initialize the game wrapper
 width = 64
 height = 64
-game = GameWrapper(width, height, False)
+game = GameWrapper(width, height, True)
 
 # Initialize the model
 model = CNNPPOPolicy((3, height, width), 6)
