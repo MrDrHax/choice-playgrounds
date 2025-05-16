@@ -6,7 +6,7 @@ steps = [
 ] * 128
 # ] * 1
 
-games = multiGames(64, 64, 8, 16) # 128 instances
+games = multiGames(64, 64, 8, 16, True) # 128 instances
 # games = multiGames(500, 500, 1, 1) # 1 instance
 
 while True:
@@ -14,6 +14,6 @@ while True:
     a = games.step(
         steps
     )
-    print(f"\r{time.time() - start}s             ", end="")
+    print(f"\rr={a[0][1]} t={time.time() - start}s             ", end="")
 
-    games.reset()
+    # games.reset()

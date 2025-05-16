@@ -70,14 +70,14 @@ def threadWorker(wrappers: list['GameWrapper'], actions: list[list[bool]], resul
 
 class multiGames:
 
-    def __init__(self, width: int, height: int, batches: int = 10, size: int = 50):
+    def __init__(self, width: int, height: int, batches: int = 10, size: int = 50, showWindows: bool = False):
         self.batches = batches
         self.size = size
 
         self.games: list[list[GameWrapper]] = []
 
         for i in range(batches):
-            self.games.append([GameWrapper(width, height, False)
+            self.games.append([GameWrapper(width, height, showWindows)
                               for _ in range(size)])
 
     def step(self, inputs: list[list[bool]]) -> tuple[bytes, int, bool]:
@@ -153,6 +153,8 @@ class MazeGame(pyglet.window.Window):
 
         self.set_keys = [False, False, False, False, False, False, ]
 
+        self.reward = 0
+
     def reset(self):
         '''Reset the maze'''
         # Adjust starting position to be more central.
@@ -177,6 +179,8 @@ class MazeGame(pyglet.window.Window):
 
         prob = self.doors[random.choice(['A', 'B'])]['probability']
         isInverse = random.random() <= prob
+
+        self.reward = 0
 
         # Initialize door positions
         for row in range(len(self.maze)):
@@ -259,6 +263,10 @@ class MazeGame(pyglet.window.Window):
                     self.maze = GOOD_ROOM if ch else BAD_ROOM
                     self.selectedDoor = door_data
                     break
+
+        # calculate reward
+        self.reward = 0.3 * (self.z -1.5)
+
 
     def collides(self, new_x, new_z):
         col = int(new_x)
@@ -568,23 +576,21 @@ class GameWrapper:
         image = self.game.get_screenshot()
 
         # mientras mas tiempo se pase sin moverse
-        self.reward -= 0.01 if not (actions[0]
-                                    or actions[1]
-                                    or actions[2]
-                                    or actions[3]) else 0
         done = False
+
+        self.reward = self.game.reward
 
         if self.game.maze != MAZE:
             # Reward for reaching next room
-            self.reward += 0.001
+            self.reward = 2
             if self.game.z > 4:
                 done = True
                 if self.game.maze == GOOD_ROOM:
                     # Reward for good room
-                    self.reward += self.game.selectedDoor['reward']
+                    self.reward = self.game.selectedDoor['reward']
                 elif self.game.maze == BAD_ROOM:
                     # Penalty for bad room
-                    self.reward -= -self.game.selectedDoor['reward']
+                    self.reward = -self.game.selectedDoor['reward']
 
         return image, self.reward, done
 
