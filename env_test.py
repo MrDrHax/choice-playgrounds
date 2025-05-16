@@ -15,3 +15,5 @@ while True:
         steps
     )
     print(f"\r{time.time() - start}s             ", end="")
+
+    games.reset()

@@ -74,7 +74,7 @@ class multiGames:
         self.batches = batches
         self.size = size
 
-        self.games = []
+        self.games: list[list[GameWrapper]] = []
 
         for i in range(batches):
             self.games.append([GameWrapper(width, height, False)
@@ -112,6 +112,14 @@ class multiGames:
         # flatten
         return [item for sublist in results for item in sublist]
 
+    def reset(self):
+        results = []
+
+        for games in self.games:
+            for game in games:
+                results.append(game.reset())
+
+        return results
 
 class MazeGame(pyglet.window.Window):
     def __init__(self, width, height, visible=True):
