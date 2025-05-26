@@ -8,8 +8,18 @@ import math
 import torch
 
 import random
-
 import threading
+
+# PytorchRL Env
+from typing import Optional
+
+import torch
+from torch import Tensor
+from torchrl.envs import EnvBase
+import torchrl.data as data
+
+from tensordict import TensorDict
+from tensordict.tensordict import TensorDictBase
 
 fps = 1/60.0
 
@@ -67,10 +77,20 @@ BAD_ROOM = [
 def threadWorker(wrappers: list['GameWrapper'], actions: list[list[bool]], results: list, index: int):
     results[index] = [w.step(a) for w, a in zip(wrappers, actions)]
 
-
 class multiGames:
 
     def __init__(self, width: int, height: int, batches: int = 10, size: int = 50, showWindows: bool = False):
+        """
+        Initializes a multiGames object which manages multiple batches of game instances.
+
+        Args:
+            width (int): The width of each game instance.
+            height (int): The height of each game instance.
+            batches (int, optional): The number of batches of games. Defaults to 10.
+            size (int, optional): The number of game instances per batch. Defaults to 50.
+            showWindows (bool, optional): Whether to display game windows. Defaults to False.
+        """
+
         self.batches = batches
         self.size = size
 
@@ -522,7 +542,6 @@ class MazeGame(pyglet.window.Window):
 
         return tensor
 
-
 class GameWrapper:
     width: int
     height: int
@@ -618,3 +637,150 @@ class GameWrapper:
         self.game.on_draw()
 
         self.game.flip()
+
+class TorchRLMazeEnv(EnvBase):
+    """
+    TorchRL-compatible wrapper for the multiGames Maze environment.
+
+    Runs `batches * size` games in parallel.
+
+    Tensordict keys:
+
+    - observation: (B, 3, H, W)
+    - state: (B, 3, H, W)
+    - action: (B, 6)
+    - reward: (B,)
+    - done: (B,)
+    - terminated: (B,)
+    """
+    metadata = {"render_modes": ["rgb_array"], "render_fps": 30}
+    batch_locked = False
+
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        device: torch.device = None,
+        show_windows: bool = False,
+    ):
+        super().__init__(device=device)
+        self.width = width
+        self.height = height
+
+        self.env = GameWrapper(width=self.width, height=self.height, showWindow=show_windows)
+        #self.env = multiGames(width=self.width, height=self.height, batches=self.batches, size=self.size, showWindows=show_windows)
+        self._rng = torch.Generator(device=self.device)
+
+        self._make_spec()
+
+    def _make_spec(self):
+        self.observation_spec = data.Composite(
+            observation=data.UnboundedContinuous(
+                shape=(3, self.height, self.width, ), dtype=torch.float32, device=self.device
+            ),
+            device=self.device
+        )
+
+        self.state_spec = self.observation_spec.clone()
+
+        self.action_spec = data.Binary(
+            shape=(6, ),
+            dtype=torch.bool,
+            device=self.device,
+        )
+
+        self.reward_spec = data.UnboundedContinuous(
+            shape=(1, ), dtype=torch.float32, device=self.device
+        )
+
+        self.done_spec = data.Binary(
+            shape=(1, ),
+            dtype=torch.bool,
+            device=self.device,
+        )
+
+    def _reset(self, tensordict: TensorDictBase = None) -> TensorDictBase:
+        """
+        Resets the environment and returns the initial observation.
+
+        Keyword Args:
+            tensordict: A tensordict to fill with the initial observation, reward, and done flag. If not provided, a new tensordict will be created.
+
+        Returns:
+            A tensordict with the initial observation, reward, and done flag.
+        """
+        results = self.env.reset()
+
+        """ imgs, rewards, dones = zip(*results)
+        obs = torch.stack(imgs, dim=0).to(self.device)
+        #reward = torch.tensor(rewards, dtype=torch.float32, device=self.device)
+        done = torch.tensor(dones, dtype=torch.bool, device=self.device) """
+
+        img, reward, done = results
+        obs = torch.tensor(img, dtype=torch.float32, device=self.device)
+        #reward = torch.tensor(reward, dtype=torch.float32, device=self.device)
+        done = torch.tensor(done, dtype=torch.bool, device=self.device)
+
+        return TensorDict(
+            {
+                "observation": obs,
+                "done": done,
+            },
+            #batch_size=[self.bs],
+            device=self.device,
+        )
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """
+        Performs a step in the environment using the provided actions and returns the resulting observations, rewards, 
+        and done status.
+
+        Args:
+            tensordict (TensorDictBase): A tensor dictionary containing the actions to be taken. The actions should be 
+            represented as a BoolTensor of shape [B, 6].
+
+        Returns:
+            TensorDictBase: A tensor dictionary containing the observations, rewards, and done status for each environment 
+            instance. The keys in the returned dictionary are:
+                - "observation": A FloatTensor of shape [B, 3, H, W] with the resulting observations.
+                - "reward": A FloatTensor of shape [B] with the rewards obtained from the environment.
+                - "done": A BoolTensor of shape [B] indicating whether each environment instance has finished.
+        """
+        actions = tensordict.get("action")
+
+        native_actions = actions.cpu().numpy().tolist()
+
+        results = self.env.step(native_actions)
+
+        """ imgs, rewards, dones = zip(*results)
+        obs = torch.stack(imgs, dim=0).to(self.device)
+        reward = torch.tensor(rewards, dtype=torch.float32, device=self.device)
+        done = torch.tensor(dones, dtype=torch.bool, device=self.device) """
+
+        img, reward, done = results
+        obs = torch.tensor(img, dtype=torch.float32, device=self.device)
+        reward = torch.tensor(reward, dtype=torch.float32, device=self.device)
+        done = torch.tensor(done, dtype=torch.bool, device=self.device)
+
+        return TensorDict(
+            {
+                "observation": obs,
+                "reward": reward,
+                "done": done,
+            },
+            #batch_size=[self.bs],
+            device=self.device,
+        )
+
+    def _set_seed(self, seed: Optional[int]):
+        """
+        Sets the seed for the random number generator.
+
+        Args:
+            seed (Optional[int]): the seed to be used. If None, the seed will not be set.
+
+        Returns:
+            None
+        """
+        rng = torch.manual_seed(seed)
+        self.rng = rng

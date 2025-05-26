@@ -7,7 +7,7 @@ import numpy as np
 class CNNPPOPolicy(nn.Module):
     def __init__(self, input_shape, action_dim):
         super().__init__()
-        C, H, W = input_shape
+        S, C, H, W = input_shape
         self.conv = nn.Sequential(
             nn.Conv2d(C, 32, 3, stride=2),
             nn.ReLU(),
@@ -16,7 +16,7 @@ class CNNPPOPolicy(nn.Module):
             nn.Flatten()
         )
         with torch.no_grad():
-            dummy = torch.zeros(1, C, H, W)
+            dummy = torch.zeros(S, C, H, W)
             n_flat = self.conv(dummy).shape[1]
 
         self.actor = nn.Sequential(
@@ -70,28 +70,40 @@ def train_ppo(env, policy, optimizer, epochs=10, steps_per_epoch=512, clip_eps=0
         obs, _, _ = env.reset()
 
         for _ in range(steps_per_epoch):
-            obs_tensor = obs.unsqueeze(0)
+            #obs_tensor = obs.unsqueeze(0)
 
             with torch.no_grad():
-                probs, value = policy(obs_tensor)
+                probs, value = policy(obs)
             action, log_prob, _ = sample_actions(probs)
             
-            next_obs, reward, done = env.step(action[0].bool().tolist())
+            ret = env.step(action.bool())
+
+            next_obs = torch.zeros(len(ret), 3, env.height, env.width)
+            reward = torch.zeros(len(ret))
+            done = torch.zeros(len(ret))
+            for i in range(len(ret)):
+                next_obs[i] = ret[i][0]
+                reward[i] = ret[i][1]
+                done[i] = ret[i][2]
+            #next_obs, reward, done = env.step(action.bool())
 
             obs_list.append(obs)
             actions_list.append(action.squeeze(0))
             log_probs_list.append(log_prob)
             rewards.append(reward)
-            values.append(value.item())
+            values.append(value)
             dones.append(done)
 
-            obs = env.reset() if done else next_obs
+            obs = env.reset() if any(done) else next_obs
 
         # Convert to tensors
         obs_batch = torch.stack(obs_list)
         actions_batch = torch.stack(actions_list)
         log_probs_old = torch.stack(log_probs_list)
         returns = compute_gae(rewards, values, dones)
+
+        print(f"returns: {returns}")
+
         advantages = torch.tensor(returns) - torch.tensor(values)
 
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
@@ -201,124 +213,127 @@ def get_input(last_action, last_reward, timestep, num_actions=2):
     # concatena los tensores de manera horizontal (dim = 1)
     return x
 
-# ======= 4. HIPERPARÁMETROS DE PPO =======
-gamma = 0.99           # Factor de descuento
-clip_epsilon = 0.2     # Parámetro de recorte PPO (clip)
-ppo_epochs = 4         # Número de épocas por actualización
-lr = 0.009             # Tasa de aprendizaje
+def Oswa():
+    # ======= 4. HIPERPARÁMETROS DE PPO =======
+    gamma = 0.99           # Factor de descuento
+    clip_epsilon = 0.2     # Parámetro de recorte PPO (clip)
+    ppo_epochs = 4         # Número de épocas por actualización
+    lr = 0.009             # Tasa de aprendizaje
 
-agent = PPOAgent()
-optimizer = optim.Adam(agent.parameters(), lr=lr)
+    agent = PPOAgent()
+    optimizer = optim.Adam(agent.parameters(), lr=lr)
 
-num_episodes = 1000    # Cantidad total de episodios
-episode_length = 5     # Pasos por episodio
+    num_episodes = 1000    # Cantidad total de episodios
+    episode_length = 5     # Pasos por episodio
 
-# ======= 5. CICLO DE ENTRENAMIENTO CON PPO =======
-for episode in range(num_episodes):
-    # Usamos el entorno RestlessBandit con volatilidad definida (0.1 para probar en este caso)
-    env = RestlessBandit(volatility=0.1)
-    agent.reset_state()
-    
-    # Listas para almacenar la trayectoria del episodio
-    states = []
-    actions = []
-    rewards = []
-    log_probs = []
-    values = []
-    
-    # Inicializamos: se parte de una acción por defecto (0) y recompensa 0 para el primer paso.
-    last_action = 0
-    last_reward = 0.0
-    
-    # Recorrido del episodio
-    for t in range(episode_length):
-        x = get_input(last_action, last_reward, t)
-        logits, value = agent(x)
-        probs = F.softmax(logits, dim=1)
-        dist = torch.distributions.Categorical(probs)
-        action = dist.sample()
-        log_prob = dist.log_prob(action)
+    # ======= 5. CICLO DE ENTRENAMIENTO CON PPO =======
+    for episode in range(num_episodes):
+        # Usamos el entorno RestlessBandit con volatilidad definida (0.1 para probar en este caso)
+        env = RestlessBandit(volatility=0.1)
+        agent.reset_state()
         
-        # Guardamos los datos de la transición
-        states.append(x)
-        actions.append(action)
-        log_probs.append(log_prob)
-        values.append(value)
+        # Listas para almacenar la trayectoria del episodio
+        states = []
+        actions = []
+        rewards = []
+        log_probs = []
+        values = []
         
-        # Ejecutamos la acción en el entorno y obtenemos la recompensa.
-        reward = env.pull(action.item())
-        rewards.append(reward)
+        # Inicializamos: se parte de una acción por defecto (0) y recompensa 0 para el primer paso.
+        last_action = 0
+        last_reward = 0.0
         
-        last_action = action.item()
-        last_reward = reward
-    
-    # ======= 5.1. Calcular los RETURNS y las VENTAJAS =======
-    returns = []
-    G = 0
-    for r in reversed(rewards):
-        G = r + gamma * G
-        returns.insert(0, G)
-    returns = torch.tensor(returns, dtype=torch.float32).unsqueeze(1)
-    values = torch.cat(values)
-    advantages = returns - values.detach()
-    
-    old_log_probs = torch.cat(log_probs).detach()
-    
-    # ======= 5.2. Actualización PPO sobre la trayectoria recogida =======
-    for _ in range(ppo_epochs):
-        new_log_probs = []
-        new_values = []
-        agent.reset_state()  # Reiniciamos el estado para reevaluar la trayectoria almacenada
-        
-        # Se reevalúa cada estado almacenado en la trayectoria
-        for i, x in enumerate(states):
+        # Recorrido del episodio
+        for t in range(episode_length):
+            x = get_input(last_action, last_reward, t)
             logits, value = agent(x)
             probs = F.softmax(logits, dim=1)
             dist = torch.distributions.Categorical(probs)
-            new_log_probs.append(dist.log_prob(actions[i]))
-            new_values.append(value)
-        new_log_probs = torch.cat(new_log_probs)
-        new_values = torch.cat(new_values)
+            action = dist.sample()
+            log_prob = dist.log_prob(action)
+            
+            # Guardamos los datos de la transición
+            states.append(x)
+            actions.append(action)
+            log_probs.append(log_prob)
+            values.append(value)
+            
+            # Ejecutamos la acción en el entorno y obtenemos la recompensa.
+            reward = env.pull(action.item())
+            rewards.append(reward)
+            
+            last_action = action.item()
+            last_reward = reward
         
-        ratio = torch.exp(new_log_probs - old_log_probs)
-        surr1 = ratio * advantages
-        surr2 = torch.clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon) * advantages
-        policy_loss = -torch.min(surr1, surr2).mean()
-        value_loss = F.mse_loss(new_values, returns)
-        loss = policy_loss + 0.5 * value_loss
+        # ======= 5.1. Calcular los RETURNS y las VENTAJAS =======
+        returns = []
+        G = 0
+        for r in reversed(rewards):
+            G = r + gamma * G
+            returns.insert(0, G)
+        returns = torch.tensor(returns, dtype=torch.float32).unsqueeze(1)
+        values = torch.cat(values)
+        advantages = returns - values.detach()
         
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-    
-    if (episode+1) % 100 == 0:
-        total_reward = sum(rewards)
-        print(f"Episode {episode+1}, Total Reward: {total_reward}, Loss: {loss.item():.4f}")
+        old_log_probs = torch.cat(log_probs).detach()
+        
+        # ======= 5.2. Actualización PPO sobre la trayectoria recogida =======
+        for _ in range(ppo_epochs):
+            new_log_probs = []
+            new_values = []
+            agent.reset_state()  # Reiniciamos el estado para reevaluar la trayectoria almacenada
+            
+            # Se reevalúa cada estado almacenado en la trayectoria
+            for i, x in enumerate(states):
+                logits, value = agent(x)
+                probs = F.softmax(logits, dim=1)
+                dist = torch.distributions.Categorical(probs)
+                new_log_probs.append(dist.log_prob(actions[i]))
+                new_values.append(value)
+            new_log_probs = torch.cat(new_log_probs)
+            new_values = torch.cat(new_values)
+            
+            ratio = torch.exp(new_log_probs - old_log_probs)
+            surr1 = ratio * advantages
+            surr2 = torch.clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon) * advantages
+            policy_loss = -torch.min(surr1, surr2).mean()
+            value_loss = F.mse_loss(new_values, returns)
+            loss = policy_loss + 0.5 * value_loss
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        
+        if (episode+1) % 100 == 0:
+            total_reward = sum(rewards)
+            print(f"Episode {episode+1}, Total Reward: {total_reward}, Loss: {loss.item():.4f}")
 
-print("Entrenamiento completado.")
+    print("Entrenamiento completado.")
 
-# ======= 6. Evaluación del agente entrenado con PPO =======
-agent.eval()  # Cambia el modelo a modo evaluación
-env = RestlessBandit(volatility=0.1)  # Nuevo episodio de prueba en entorno cambiante
-agent.reset_state()
+    # ======= 6. Evaluación del agente entrenado con PPO =======
+    agent.eval()  # Cambia el modelo a modo evaluación
+    env = RestlessBandit(volatility=0.1)  # Nuevo episodio de prueba en entorno cambiante
+    agent.reset_state()
 
-last_action = 0
-last_reward = 0
-total_reward = 0
+    last_action = 0
+    last_reward = 0
+    total_reward = 0
 
-print("Probabilidades ocultas del entorno:", env.probs)
+    print("Probabilidades ocultas del entorno:", env.probs)
 
-for t in range(5):  # Evaluamos por 5 pasos
-    with torch.no_grad():
-        x = get_input(last_action, last_reward, t)
-        logits, _ = agent(x)
-        probs = F.softmax(logits, dim=1)
-        action = torch.multinomial(probs, num_samples=1).item()
+    for t in range(5):  # Evaluamos por 5 pasos
+        with torch.no_grad():
+            x = get_input(last_action, last_reward, t)
+            logits, _ = agent(x)
+            probs = F.softmax(logits, dim=1)
+            action = torch.multinomial(probs, num_samples=1).item()
 
-    reward = env.pull(action)
-    total_reward += reward
-    print(f"Paso {t} | Acción: {action} | Recompensa: {reward}")
-    last_action = action
-    last_reward = reward
+        reward = env.pull(action)
+        total_reward += reward
+        print(f"Paso {t} | Acción: {action} | Recompensa: {reward}")
+        last_action = action
+        last_reward = reward
 
-print("Recompensa total:", total_reward)
+    print("Recompensa total:", total_reward)
+
+    return agent
