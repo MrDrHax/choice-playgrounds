@@ -645,13 +645,10 @@ class TorchRLMazeEnv(EnvBase):
     Runs `batches * size` games in parallel.
 
     Tensordict keys:
-
-    - observation: (B, 3, H, W)
-    - state: (B, 3, H, W)
-    - action: (B, 6)
-    - reward: (B,)
-    - done: (B,)
-    - terminated: (B,)
+    - "observation": The current observation of the environment, a tensor of shape [B, 3, H, W].
+    - "done": A boolean tensor of shape [B] indicating whether each environment instance has finished.
+    - "reward": A float tensor of shape [B] indicating the reward for each environment instance.
+    - "action": A boolean tensor of shape [B, 6] indicating the action to be taken for each environment instance.
     """
     metadata = {"render_modes": ["rgb_array"], "render_fps": 30}
     batch_locked = False
@@ -660,6 +657,8 @@ class TorchRLMazeEnv(EnvBase):
         self,
         width: int,
         height: int,
+        batches: int = 64,
+        size: int = 1,
         device: torch.device = None,
         show_windows: bool = False,
     ):
@@ -667,8 +666,12 @@ class TorchRLMazeEnv(EnvBase):
         self.width = width
         self.height = height
 
-        self.env = GameWrapper(width=self.width, height=self.height, showWindow=show_windows)
-        #self.env = multiGames(width=self.width, height=self.height, batches=self.batches, size=self.size, showWindows=show_windows)
+        #self.batch_size = torch.Size([])
+        self.batch_size = torch.Size([batches * size])
+        self.batches = batches * size
+        
+        #self.env = GameWrapper(width=self.width, height=self.height, showWindow=show_windows)
+        self.env = multiGames(width=self.width, height=self.height, batches=batches, size=size, showWindows=show_windows)
         self._rng = torch.Generator(device=self.device)
 
         self._make_spec()
@@ -676,25 +679,28 @@ class TorchRLMazeEnv(EnvBase):
     def _make_spec(self):
         self.observation_spec = data.Composite(
             observation=data.UnboundedContinuous(
-                shape=(3, self.height, self.width, ), dtype=torch.float32, device=self.device
+                shape=(self.batches, 3, self.height, self.width, ), dtype=torch.float32, device=self.device
             ),
-            device=self.device
+            device=self.device.index,
+            shape=self.batch_size,
         )
 
         self.state_spec = self.observation_spec.clone()
 
         self.action_spec = data.Binary(
-            shape=(6, ),
+            shape=(self.batches, 6, ),
             dtype=torch.bool,
             device=self.device,
         )
 
         self.reward_spec = data.UnboundedContinuous(
-            shape=(1, ), dtype=torch.float32, device=self.device
+            shape=(self.batches, 1, ),
+            dtype=torch.float32,
+            device=self.device,
         )
 
         self.done_spec = data.Binary(
-            shape=(1, ),
+            shape=(self.batches, 1, ),
             dtype=torch.bool,
             device=self.device,
         )
@@ -711,64 +717,40 @@ class TorchRLMazeEnv(EnvBase):
         """
         results = self.env.reset()
 
-        """ imgs, rewards, dones = zip(*results)
+        imgs, rewards, dones = zip(*results)
         obs = torch.stack(imgs, dim=0).to(self.device)
         #reward = torch.tensor(rewards, dtype=torch.float32, device=self.device)
-        done = torch.tensor(dones, dtype=torch.bool, device=self.device) """
-
-        img, reward, done = results
-        obs = torch.tensor(img, dtype=torch.float32, device=self.device)
-        #reward = torch.tensor(reward, dtype=torch.float32, device=self.device)
-        done = torch.tensor(done, dtype=torch.bool, device=self.device)
+        done = torch.tensor(dones, dtype=torch.bool, device=self.device)
 
         return TensorDict(
             {
                 "observation": obs,
                 "done": done,
             },
-            #batch_size=[self.bs],
+            batch_size=self.batch_size,
             device=self.device,
         )
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """
-        Performs a step in the environment using the provided actions and returns the resulting observations, rewards, 
-        and done status.
-
-        Args:
-            tensordict (TensorDictBase): A tensor dictionary containing the actions to be taken. The actions should be 
-            represented as a BoolTensor of shape [B, 6].
-
-        Returns:
-            TensorDictBase: A tensor dictionary containing the observations, rewards, and done status for each environment 
-            instance. The keys in the returned dictionary are:
-                - "observation": A FloatTensor of shape [B, 3, H, W] with the resulting observations.
-                - "reward": A FloatTensor of shape [B] with the rewards obtained from the environment.
-                - "done": A BoolTensor of shape [B] indicating whether each environment instance has finished.
-        """
         actions = tensordict.get("action")
 
-        native_actions = actions.cpu().numpy().tolist()
+        # Convert to native actions
+        native_actions = actions.cpu().numpy()
 
-        results = self.env.step(native_actions)
+        results = self.env.step(native_actions)   # a list of N = batches*size tuples
+        imgs, rewards, dones = zip(*results)      # each is a length-N tuple
 
-        """ imgs, rewards, dones = zip(*results)
-        obs = torch.stack(imgs, dim=0).to(self.device)
+        obs    = torch.stack([torch.tensor(img)   for img   in imgs],    dim=0).to(self.device)
         reward = torch.tensor(rewards, dtype=torch.float32, device=self.device)
-        done = torch.tensor(dones, dtype=torch.bool, device=self.device) """
-
-        img, reward, done = results
-        obs = torch.tensor(img, dtype=torch.float32, device=self.device)
-        reward = torch.tensor(reward, dtype=torch.float32, device=self.device)
-        done = torch.tensor(done, dtype=torch.bool, device=self.device)
+        done   = torch.tensor(dones,   dtype=torch.bool,    device=self.device)
 
         return TensorDict(
             {
                 "observation": obs,
                 "reward": reward,
-                "done": done,
+                "done": done
             },
-            #batch_size=[self.bs],
+            batch_size=self.batch_size,
             device=self.device,
         )
 
