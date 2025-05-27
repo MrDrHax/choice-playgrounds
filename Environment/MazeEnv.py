@@ -1,3 +1,5 @@
+# type: ignore
+
 import gym
 from gym import spaces
 import numpy as np
@@ -206,12 +208,12 @@ class MazeGame(pyglet.window.Window):
         for row in range(len(self.maze)):
             for col in range(len(self.maze[row])):
                 if self.maze[row][col] in self.doors:
-                    self.doors[self.maze[row][col]]['position'] = (col, row)
+                    self.doors[self.maze[row][col]]['position'] = (col, row) 
 
                     # pre cook probability to show possible good/bad outcome
 
                     self.doors[self.maze[row][col]
-                               ]['signal'] = isInverse
+                               ]['signal'] = isInverse 
 
     def on_resize(self, width, height):
         # Enforce fixed size
