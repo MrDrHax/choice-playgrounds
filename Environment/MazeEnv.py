@@ -598,7 +598,7 @@ class GameWrapper:
         done = False
 
         base_progress = self.game.z - 1.5
-        self.reward = 100/(stepCount + 1)
+        self.reward = base_progress * 0.1
 
         # target_angle = 180.0
         # angle_diff = abs(((self.game.angle - target_angle + 180) % 360) - 180)
