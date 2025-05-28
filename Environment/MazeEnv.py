@@ -76,8 +76,8 @@ BAD_ROOM = [
 ]
 
 
-def threadWorker(wrappers: list['GameWrapper'], actions: list[list[bool]], results: list, index: int):
-    results[index] = [w.step(a) for w, a in zip(wrappers, actions)]
+def threadWorker(wrappers: list['GameWrapper'], actions: list[list[bool]], results: list, index: int, stepCount: int):
+    results[index] = [w.step(a, stepCount) for w, a in zip(wrappers, actions)]
 
 class multiGames:
 
@@ -102,7 +102,7 @@ class multiGames:
             self.games.append([GameWrapper(width, height, showWindows)
                               for _ in range(size)])
 
-    def step(self, inputs: list[list[bool]]) -> tuple[bytes, int, bool]:
+    def step(self, inputs: list[list[bool]], stepCount: int) -> tuple[bytes, int, bool]:
         threads = []
 
         results = [None for _ in range(self.batches)]
@@ -113,6 +113,7 @@ class multiGames:
                 inputs[i * self.size: i * self.size + self.size],
                 results,
                 i,
+                stepCount,
             )
 
         # for i in range(self.batches):
@@ -287,8 +288,7 @@ class MazeGame(pyglet.window.Window):
                     break
 
         # calculate reward
-        self.reward = 0.3 * (self.z -1.5)
-
+        #self.reward = 0.3 * (self.z -1.5)
 
     def collides(self, new_x, new_z):
         col = int(new_x)
@@ -559,7 +559,7 @@ class GameWrapper:
 
         self.reward = 0
 
-    def step(self, actions: list[bool]) -> tuple[bytes, int, bool]:
+    def step(self, actions: list[bool], stepCount: int) -> tuple[bytes, int, bool]:
         '''
         step Step through an iteration. In game terms "Tick"
 
@@ -595,23 +595,28 @@ class GameWrapper:
 
         # Get the image of the game
         image = self.game.get_screenshot()
-
-        # mientras mas tiempo se pase sin moverse
         done = False
 
-        self.reward = self.game.reward
+        base_progress = self.game.z - 1.5
+        self.reward = 100/(stepCount + 1)
+
+        # target_angle = 180.0
+        # angle_diff = abs(((self.game.angle - target_angle + 180) % 360) - 180)
+        # angle_reward = 0.1 * (1 - angle_diff / 180)
+        # self.reward += angle_reward
+
+
+        if not any(actions):
+            self.reward -= 0.1
 
         if self.game.maze != MAZE:
-            # Reward for reaching next room
-            self.reward = 2
+            self.reward += 2
             if self.game.z > 4:
                 done = True
                 if self.game.maze == GOOD_ROOM:
-                    # Reward for good room
-                    self.reward = self.game.selectedDoor['reward']
+                    self.reward = self.game.selectedDoor["reward"]
                 elif self.game.maze == BAD_ROOM:
-                    # Penalty for bad room
-                    self.reward = -self.game.selectedDoor['reward']
+                    self.reward = -self.game.selectedDoor["reward"]
 
         return image, self.reward, done
 
@@ -678,6 +683,8 @@ class TorchRLMazeEnv(EnvBase):
 
         self._make_spec()
 
+        self.step_count = 0
+
     def _make_spec(self):
         self.observation_spec = data.Composite(
             observation=data.UnboundedContinuous(
@@ -724,6 +731,8 @@ class TorchRLMazeEnv(EnvBase):
         #reward = torch.tensor(rewards, dtype=torch.float32, device=self.device)
         done = torch.tensor(dones, dtype=torch.bool, device=self.device)
 
+        self.step_count = 0
+
         return TensorDict(
             {
                 "observation": obs,
@@ -739,12 +748,14 @@ class TorchRLMazeEnv(EnvBase):
         # Convert to native actions
         native_actions = actions.cpu().numpy()
 
-        results = self.env.step(native_actions)   # a list of N = batches*size tuples
+        results = self.env.step(native_actions, self.step_count)   # a list of N = batches*size tuples
         imgs, rewards, dones = zip(*results)      # each is a length-N tuple
 
         obs    = torch.stack([torch.tensor(img)   for img   in imgs],    dim=0).to(self.device)
         reward = torch.tensor(rewards, dtype=torch.float32, device=self.device)
         done   = torch.tensor(dones,   dtype=torch.bool,    device=self.device)
+
+        self.step_count += 1
 
         return TensorDict(
             {
