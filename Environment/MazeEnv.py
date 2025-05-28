@@ -610,13 +610,19 @@ class GameWrapper:
             self.reward -= 0.1
 
         if self.game.maze != MAZE:
-            self.reward += 2
-            if self.game.z > 4:
-                done = True
-                if self.game.maze == GOOD_ROOM:
-                    self.reward = self.game.selectedDoor["reward"]
-                elif self.game.maze == BAD_ROOM:
-                    self.reward = -self.game.selectedDoor["reward"]
+            # self.reward += 2
+            # if self.game.z > 4:
+            #     done = True
+            #     if self.game.maze == GOOD_ROOM:
+            #         self.reward = self.game.selectedDoor["reward"]
+            #     elif self.game.maze == BAD_ROOM:
+            #         self.reward = -self.game.selectedDoor["reward"]
+
+            done = True
+            if self.game.maze == GOOD_ROOM:
+                self.reward = self.game.selectedDoor["reward"]
+            elif self.game.maze == BAD_ROOM:
+                self.reward = -self.game.selectedDoor["reward"]
 
         return image, self.reward, done
 
