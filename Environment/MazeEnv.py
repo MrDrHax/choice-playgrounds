@@ -27,8 +27,8 @@ fps = 1/60.0
 
 doorOptions = {
     'A': {'position': None, 'probability': 0.75, 'reward': 10, 'symbol': 'A'},
-    'B': {'position': None, 'probability': 0.25, 'reward': 10, 'symbol': 'B'},
-    'C': {'position': None, 'probability': 0.75, 'reward': 3, 'symbol': 'C'},
+    'B': {'position': None, 'probability': 0.25, 'reward': 1, 'symbol': 'B'},
+    'C': {'position': None, 'probability': 0.75, 'reward': 30, 'symbol': 'C'},
     'D': {'position': None, 'probability': 0.25, 'reward': 3, 'symbol': 'D'},
 }
 
@@ -176,7 +176,12 @@ class MazeGame(pyglet.window.Window):
 
         self.set_keys = [False, False, False, False, False, False, ]
 
-        self.door_pos_z = 0.0  # Position of the door in Z direction
+        # Initialize door positions
+        for row in range(len(self.maze)):
+            for col in range(len(self.maze[row])):
+                if self.maze[row][col] in self.doors:
+                    self.door_pos = row
+                    return
 
     def reset(self):
         '''Reset the maze'''
@@ -214,7 +219,7 @@ class MazeGame(pyglet.window.Window):
                     self.doors[self.maze[row][col]
                                ]['signal'] = isInverse 
                     
-                    self.door_pos_z = row
+                    self.door_pos = (row, col)
 
     def on_resize(self, width, height):
         # Enforce fixed size
@@ -592,14 +597,13 @@ class GameWrapper:
         self.game.set_keys = actions
 
         prev_pos = np.array([self.game.z])
-
         self._run_scheduler()
-
         new_pos = np.array([self.game.z])
 
         # Get the image of the game
         image = self.game.get_screenshot()
         done = False
+
         self.reward = -0.01 # Time Penalty
 
         # Penalty for not taking any action
@@ -607,18 +611,24 @@ class GameWrapper:
             self.reward -= 0.1
 
         # Reward for moving towards the goal
-        phi_prev = -np.linalg.norm(prev_pos - np.array([self.game.door_pos_z]))
-        phi_new = -np.linalg.norm(new_pos - np.array([self.game.door_pos_z]))
+        phi_prev = -np.linalg.norm(prev_pos - np.array([self.game.door_pos]))
+        phi_new = -np.linalg.norm(new_pos - np.array([self.game.door_pos]))
+        #self.reward += 0.99 * (phi_new - phi_prev)
 
-        self.reward += 0.99 *(phi_new - phi_prev)
+        # print( self.reward)
 
+        # Give reward depending on the door entered, instantly
         if self.game.maze != MAZE:
-            if self.game.z > self.game.door_pos_z:
+            self.reward += self.game.selectedDoor["reward"] * 0.1
+
+            if self.game.z > 3:
                 done = True
-            if self.game.maze == GOOD_ROOM:
                 self.reward = self.game.selectedDoor["reward"]
-            elif self.game.maze == BAD_ROOM:
-                self.reward = -self.game.selectedDoor["reward"]
+
+            # if self.game.maze == GOOD_ROOM:
+            #     self.reward = self.game.selectedDoor["reward"]
+            # elif self.game.maze == BAD_ROOM:
+            #     self.reward = self.game.selectedDoor["reward"]
 
         return image, self.reward, done
 
@@ -632,6 +642,9 @@ class GameWrapper:
         return self.game.get_screenshot(), 0, False
 
     def close(self):
+        """
+        Closes the current Game
+        """
         self.game.close()
         self.game = None
 
