@@ -176,7 +176,7 @@ class MazeGame(pyglet.window.Window):
 
         self.set_keys = [False, False, False, False, False, False, ]
 
-        self.reward = 0
+        self.door_pos_z = 0.0  # Position of the door in Z direction
 
     def reset(self):
         '''Reset the maze'''
@@ -203,8 +203,6 @@ class MazeGame(pyglet.window.Window):
         prob = self.doors[random.choice(['A', 'B'])]['probability']
         isInverse = random.random() <= prob
 
-        self.reward = 0
-
         # Initialize door positions
         for row in range(len(self.maze)):
             for col in range(len(self.maze[row])):
@@ -215,6 +213,8 @@ class MazeGame(pyglet.window.Window):
 
                     self.doors[self.maze[row][col]
                                ]['signal'] = isInverse 
+                    
+                    self.door_pos_z = row
 
     def on_resize(self, width, height):
         # Enforce fixed size
@@ -591,34 +591,30 @@ class GameWrapper:
 
         self.game.set_keys = actions
 
+        prev_pos = np.array([self.game.z])
+
         self._run_scheduler()
+
+        new_pos = np.array([self.game.z])
 
         # Get the image of the game
         image = self.game.get_screenshot()
         done = False
+        self.reward = -0.01 # Time Penalty
 
-        base_progress = self.game.z - 1.5
-        self.reward = base_progress * 0.1
-
-        # target_angle = 180.0
-        # angle_diff = abs(((self.game.angle - target_angle + 180) % 360) - 180)
-        # angle_reward = 0.1 * (1 - angle_diff / 180)
-        # self.reward += angle_reward
-
-
+        # Penalty for not taking any action
         if not any(actions):
             self.reward -= 0.1
 
-        if self.game.maze != MAZE:
-            # self.reward += 2
-            # if self.game.z > 4:
-            #     done = True
-            #     if self.game.maze == GOOD_ROOM:
-            #         self.reward = self.game.selectedDoor["reward"]
-            #     elif self.game.maze == BAD_ROOM:
-            #         self.reward = -self.game.selectedDoor["reward"]
+        # Reward for moving towards the goal
+        phi_prev = -np.linalg.norm(prev_pos - np.array([self.game.door_pos_z]))
+        phi_new = -np.linalg.norm(new_pos - np.array([self.game.door_pos_z]))
 
-            done = True
+        self.reward += 0.99 *(phi_new - phi_prev)
+
+        if self.game.maze != MAZE:
+            if self.game.z > self.game.door_pos_z:
+                done = True
             if self.game.maze == GOOD_ROOM:
                 self.reward = self.game.selectedDoor["reward"]
             elif self.game.maze == BAD_ROOM:
