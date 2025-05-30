@@ -26,10 +26,10 @@ from tensordict.tensordict import TensorDictBase
 fps = 1/60.0
 
 doorOptions = {
-    'A': {'position': None, 'probability': 0.75, 'reward': 10, 'symbol': 'A'},
-    'B': {'position': None, 'probability': 0.25, 'reward': 1, 'symbol': 'B'},
-    'C': {'position': None, 'probability': 0.75, 'reward': 30, 'symbol': 'C'},
-    'D': {'position': None, 'probability': 0.25, 'reward': 3, 'symbol': 'D'},
+    'A': {'position': None, 'probability': 0.75, 'reward': 1, 'rewardBad': 0.25, 'symbol': 'A'},
+    'B': {'position': None, 'probability': 0.25, 'reward': 1, 'rewardBad': 0.25, 'symbol': 'B'},
+    'C': {'position': None, 'probability': 0.75, 'reward': 0.75,'rewardBad': 0.5,  'symbol': 'C'},
+    'D': {'position': None, 'probability': 0.25, 'reward': 0.75,'rewardBad': 0.5,  'symbol': 'D'},
 }
 
 doorPairs = [
@@ -177,11 +177,11 @@ class MazeGame(pyglet.window.Window):
         self.set_keys = [False, False, False, False, False, False, ]
 
         # Initialize door positions
-        for row in range(len(self.maze)):
-            for col in range(len(self.maze[row])):
-                if self.maze[row][col] in self.doors:
-                    self.door_pos = row
-                    return
+        # for row in range(len(self.maze)):
+        #     for col in range(len(self.maze[row])):
+        #         if self.maze[row][col] in self.doors:
+        #             self.door_pos = row
+        #             return
 
     def reset(self):
         '''Reset the maze'''
@@ -200,7 +200,7 @@ class MazeGame(pyglet.window.Window):
         rotated = random.choice([True, False])
 
         # Select the first and second door. Rotate them if needed
-        self.doors: dict[dict] = {
+        self.doors: dict[str, dict] = {
             'A': doorOptions[selected[rotated]],
             'B': doorOptions[selected[not rotated]],
         }
@@ -219,7 +219,8 @@ class MazeGame(pyglet.window.Window):
                     self.doors[self.maze[row][col]
                                ]['signal'] = isInverse 
                     
-                    self.door_pos = (row, col)
+                    
+        self.door_pos = self.doors[random.choice(['A', 'B'])]['position']
 
     def on_resize(self, width, height):
         # Enforce fixed size
@@ -613,22 +614,22 @@ class GameWrapper:
         # Reward for moving towards the goal
         phi_prev = -np.linalg.norm(prev_pos - np.array([self.game.door_pos]))
         phi_new = -np.linalg.norm(new_pos - np.array([self.game.door_pos]))
-        #self.reward += 0.99 * (phi_new - phi_prev)
+        self.reward += 0.01 * (phi_new - phi_prev)
 
         # print( self.reward)
 
         # Give reward depending on the door entered, instantly
         if self.game.maze != MAZE:
-            self.reward += self.game.selectedDoor["reward"] * 0.1
+            # self.reward += self.game.selectedDoor["reward"] * 0.1
 
-            if self.game.z > 3:
-                done = True
+            # if self.game.z > 3:
+            #     done = True
+            #     self.reward = self.game.selectedDoor["reward"]
+
+            if self.game.maze == GOOD_ROOM:
                 self.reward = self.game.selectedDoor["reward"]
-
-            # if self.game.maze == GOOD_ROOM:
-            #     self.reward = self.game.selectedDoor["reward"]
-            # elif self.game.maze == BAD_ROOM:
-            #     self.reward = self.game.selectedDoor["reward"]
+            elif self.game.maze == BAD_ROOM:
+                self.reward = self.game.selectedDoor['rewardBad']
 
         return image, self.reward, done
 
