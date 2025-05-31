@@ -652,7 +652,7 @@ class GameWrapper:
         self.game = None
 
     def _run_scheduler(self):
-        pyglet.clock.tick()
+        pygsampleslet.clock.tick()
 
         self.game.switch_to()
         self.game.dispatch_events()
