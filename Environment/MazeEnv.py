@@ -220,7 +220,8 @@ class MazeGame(pyglet.window.Window):
                                ]['signal'] = isInverse 
                     
                     
-        self.door_pos = self.doors[random.choice(['A', 'B'])]['position']
+        # self.door_pos = self.doors[random.choice(['A', 'B'])]['position'][1]
+        self.door_pos = 5
 
     def on_resize(self, width, height):
         # Enforce fixed size
@@ -614,7 +615,8 @@ class GameWrapper:
         # Reward for moving towards the goal
         phi_prev = -np.linalg.norm(prev_pos - np.array([self.game.door_pos]))
         phi_new = -np.linalg.norm(new_pos - np.array([self.game.door_pos]))
-        self.reward += 0.01 * (phi_new - phi_prev)
+        self.reward += 0.4 * (phi_new - phi_prev) + 0.1
+        # self.reward += 0.01 * phi_new +0.05
 
         # print( self.reward)
 
@@ -650,7 +652,7 @@ class GameWrapper:
         self.game = None
 
     def _run_scheduler(self):
-        pyglet.clock.tick()
+        pygsampleslet.clock.tick()
 
         self.game.switch_to()
         self.game.dispatch_events()
